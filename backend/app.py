@@ -92,25 +92,27 @@ def create_clip():
         temp_download_path = TEMP_DIR / f'{video_id}_full.%(ext)s'
 
         # Download video with yt-dlp
+        # Using mobile/TV clients to avoid bot detection without cookies
         ydl_opts = {
-            'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+            'format': 'best[ext=mp4]/best',  # Simplified format to work with mobile clients
             'outtmpl': str(temp_download_path),
             'quiet': False,
             'no_warnings': False,
-            # Add headers and options to avoid bot detection
+            # Use mobile user agent
             'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language': 'en-us,en;q=0.5',
-                'Sec-Fetch-Mode': 'navigate',
+                'User-Agent': 'com.google.android.youtube/17.36.4 (Linux; U; Android 12; en_US) gzip',
             },
-            # Use extractors to bypass bot detection
+            # Force mobile/TV API to bypass bot detection
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['android', 'web'],
-                    'skip': ['translated_subs']
+                    'player_client': ['android', 'ios'],
+                    'player_skip': ['webpage', 'configs'],
+                    'skip': ['translated_subs', 'dash', 'hls']
                 }
             },
+            # Additional options
+            'nocheckcertificate': True,
+            'no_check_certificate': True,
         }
 
         print(f"Downloading video from {url}")
