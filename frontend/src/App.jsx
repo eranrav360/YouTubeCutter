@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Download, Scissors, Youtube, Clock, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Download, Scissors, Youtube, Clock, AlertCircle, CheckCircle2, Loader2, Play } from 'lucide-react';
 
 // Backend API URL - update this based on your deployment
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
@@ -11,6 +11,28 @@ export default function App() {
   const [status, setStatus] = useState('idle'); // idle, processing, success, error
   const [message, setMessage] = useState('');
   const [downloadUrl, setDownloadUrl] = useState('');
+  const [videoId, setVideoId] = useState('');
+  const [showPreview, setShowPreview] = useState(false);
+  const playerRef = useRef(null);
+
+  // Extract YouTube video ID from URL
+  const extractVideoId = (urlString) => {
+    const regExp = /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*/;
+    const match = urlString.match(regExp);
+    return (match && match[7].length === 11) ? match[7] : null;
+  };
+
+  // Convert seconds to MM:SS or HH:MM:SS format
+  const secondsToTimeString = (seconds) => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+
+    if (hours > 0) {
+      return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+    return `${minutes}:${secs.toString().padStart(2, '0')}`;
+  };
 
   const parseTimeToSeconds = (timeStr) => {
     if (!timeStr) return 0;
@@ -18,6 +40,58 @@ export default function App() {
     if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
     if (parts.length === 2) return parts[0] * 60 + parts[1];
     return parts[0] || 0;
+  };
+
+  // Load YouTube IFrame API
+  useEffect(() => {
+    // Load YouTube IFrame API script
+    if (!window.YT) {
+      const tag = document.createElement('script');
+      tag.src = 'https://www.youtube.com/iframe_api';
+      const firstScriptTag = document.getElementsByTagName('script')[0];
+      firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+    }
+  }, []);
+
+  // Load YouTube video when URL changes
+  useEffect(() => {
+    const id = extractVideoId(url);
+    if (id) {
+      setVideoId(id);
+      setShowPreview(true);
+
+      // Initialize YouTube player once API is ready
+      const initPlayer = () => {
+        if (window.YT && window.YT.Player) {
+          playerRef.current = new window.YT.Player('youtube-player', {
+            videoId: id,
+          });
+        }
+      };
+
+      if (window.YT && window.YT.Player) {
+        initPlayer();
+      } else {
+        window.onYouTubeIframeAPIReady = initPlayer;
+      }
+    } else {
+      setShowPreview(false);
+    }
+  }, [url]);
+
+  // Capture current time from YouTube player
+  const captureStartTime = () => {
+    if (playerRef.current && playerRef.current.getCurrentTime) {
+      const currentTime = playerRef.current.getCurrentTime();
+      setStartTime(secondsToTimeString(currentTime));
+    }
+  };
+
+  const captureEndTime = () => {
+    if (playerRef.current && playerRef.current.getCurrentTime) {
+      const currentTime = playerRef.current.getCurrentTime();
+      setEndTime(secondsToTimeString(currentTime));
+    }
   };
 
   const validateInputs = () => {
@@ -132,6 +206,37 @@ export default function App() {
                   className="w-full bg-zinc-950/50 border border-zinc-700 rounded-xl px-5 py-4 text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all duration-300"
                 />
               </div>
+
+              {/* Video Preview */}
+              {showPreview && videoId && (
+                <div className="space-y-3 animate-fadeIn">
+                  <label className="text-sm font-semibold text-zinc-300 uppercase tracking-wider flex items-center gap-2">
+                    <Play className="w-4 h-4" />
+                    Video Preview
+                  </label>
+                  <div className="relative rounded-xl overflow-hidden bg-zinc-950/50 border border-zinc-700">
+                    <div id="youtube-player" style={{width: '100%', height: '315px'}}></div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      onClick={captureStartTime}
+                      type="button"
+                      className="bg-blue-600 hover:bg-blue-500 text-white font-semibold py-3 px-4 rounded-lg transition-all duration-200 flex items-center justify-center gap-2 text-sm"
+                    >
+                      <Clock className="w-4 h-4" />
+                      Set Start Here
+                    </button>
+                    <button
+                      onClick={captureEndTime}
+                      type="button"
+                      className="bg-purple-600 hover:bg-purple-500 text-white font-semibold py-3 px-4 rounded-lg transition-all duration-200 flex items-center justify-center gap-2 text-sm"
+                    >
+                      <Clock className="w-4 h-4" />
+                      Set End Here
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Time Inputs */}
               <div className="grid grid-cols-2 gap-4">
