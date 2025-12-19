@@ -92,8 +92,9 @@ def create_clip():
         temp_download_path = TEMP_DIR / f'{video_id}_full.%(ext)s'
 
         # Download video with yt-dlp
-        # Check if cookies file exists
+        # Check for cookies from environment variable or file
         cookies_file = Path('cookies.txt')
+        cookies_env = os.environ.get('YOUTUBE_COOKIES')
 
         ydl_opts = {
             'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
@@ -103,11 +104,16 @@ def create_clip():
         }
 
         # Add cookies if available
-        if cookies_file.exists():
-            print("Using cookies for authentication")
+        if cookies_env:
+            # Create cookies file from environment variable
+            print("Using cookies from environment variable")
+            cookies_file.write_text(cookies_env)
+            ydl_opts['cookiefile'] = str(cookies_file)
+        elif cookies_file.exists():
+            print("Using cookies from file")
             ydl_opts['cookiefile'] = str(cookies_file)
         else:
-            print("No cookies file found, trying without authentication")
+            print("No cookies found, trying without authentication")
             # Try mobile API as fallback
             ydl_opts['extractor_args'] = {
                 'youtube': {
