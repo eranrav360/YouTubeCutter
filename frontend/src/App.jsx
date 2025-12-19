@@ -60,22 +60,34 @@ export default function App() {
       setVideoId(id);
       setShowPreview(true);
 
-      // Initialize YouTube player once API is ready
-      const initPlayer = () => {
-        if (window.YT && window.YT.Player) {
-          playerRef.current = new window.YT.Player('youtube-player', {
-            videoId: id,
-          });
-        }
-      };
+      // Small delay to ensure DOM is ready
+      setTimeout(() => {
+        // Initialize YouTube player once API is ready
+        const initPlayer = () => {
+          if (window.YT && window.YT.Player) {
+            const element = document.getElementById('youtube-player');
+            if (element && !playerRef.current) {
+              playerRef.current = new window.YT.Player('youtube-player', {
+                height: '315',
+                width: '100%',
+                videoId: id,
+                playerVars: {
+                  'playsinline': 1
+                },
+              });
+            }
+          }
+        };
 
-      if (window.YT && window.YT.Player) {
-        initPlayer();
-      } else {
-        window.onYouTubeIframeAPIReady = initPlayer;
-      }
+        if (window.YT && window.YT.Player) {
+          initPlayer();
+        } else {
+          window.onYouTubeIframeAPIReady = initPlayer;
+        }
+      }, 100);
     } else {
       setShowPreview(false);
+      playerRef.current = null;
     }
   }, [url]);
 
