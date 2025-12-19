@@ -92,28 +92,28 @@ def create_clip():
         temp_download_path = TEMP_DIR / f'{video_id}_full.%(ext)s'
 
         # Download video with yt-dlp
-        # Using mobile/TV clients to avoid bot detection without cookies
+        # Check if cookies file exists
+        cookies_file = Path('cookies.txt')
+
         ydl_opts = {
-            'format': 'best[ext=mp4]/best',  # Simplified format to work with mobile clients
+            'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
             'outtmpl': str(temp_download_path),
             'quiet': False,
             'no_warnings': False,
-            # Use mobile user agent
-            'http_headers': {
-                'User-Agent': 'com.google.android.youtube/17.36.4 (Linux; U; Android 12; en_US) gzip',
-            },
-            # Force mobile/TV API to bypass bot detection
-            'extractor_args': {
+        }
+
+        # Add cookies if available
+        if cookies_file.exists():
+            print("Using cookies for authentication")
+            ydl_opts['cookiefile'] = str(cookies_file)
+        else:
+            print("No cookies file found, trying without authentication")
+            # Try mobile API as fallback
+            ydl_opts['extractor_args'] = {
                 'youtube': {
                     'player_client': ['android', 'ios'],
-                    'player_skip': ['webpage', 'configs'],
-                    'skip': ['translated_subs', 'dash', 'hls']
                 }
-            },
-            # Additional options
-            'nocheckcertificate': True,
-            'no_check_certificate': True,
-        }
+            }
 
         print(f"Downloading video from {url}")
         try:
