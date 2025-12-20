@@ -7,6 +7,7 @@ import subprocess
 from pathlib import Path
 import time
 import threading
+import gc
 
 app = Flask(__name__)
 CORS(app)
@@ -97,10 +98,13 @@ def create_clip():
         cookies_env = os.environ.get('YOUTUBE_COOKIES')
 
         ydl_opts = {
-            'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+            # Use lower quality to reduce memory usage on free tier
+            'format': 'worst[ext=mp4]/best[ext=mp4][height<=720]/best[height<=720]/best',
             'outtmpl': str(temp_download_path),
             'quiet': False,
             'no_warnings': False,
+            # Limit buffer size to reduce memory
+            'http_chunk_size': 1048576,  # 1MB chunks
         }
 
         # Add cookies if available
@@ -175,6 +179,9 @@ def create_clip():
 
         print(f"Clip created successfully: {output_path}")
 
+        # Force garbage collection to free memory
+        gc.collect()
+
         # Return success with download URL
         return jsonify({
             'success': True,
@@ -185,6 +192,8 @@ def create_clip():
 
     except Exception as e:
         print(f"Error: {str(e)}")
+        # Clean up on error
+        gc.collect()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/download/<video_id>', methods=['GET'])
