@@ -108,15 +108,16 @@ def create_clip():
         cookies_file = Path('cookies.txt')
         cookies_env = os.environ.get('YOUTUBE_COOKIES')
 
+        # Calculate duration and add buffer for segmented download
+        duration = end_time - start_time
+        # Add 5 second buffer before and after for better quality
+        download_start = max(0, start_time - 5)
+        download_end = end_time + 5
+
         ydl_opts = {
-            # Optimized for quality while staying within 512MB memory limit
-            # Prefer 1080p MP4, fall back to 720p, then lower qualities
-            # Using bestvideo+bestaudio for better quality when possible
-            'format': (
-                'bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]/best[ext=mp4][height<=1080]/'
-                'bestvideo[ext=mp4][height<=720]+bestaudio[ext=m4a]/best[ext=mp4][height<=720]/'
-                'best[height<=720]/best'
-            ),
+            # Download only needed segment to reduce memory usage
+            # Use 720p max to balance quality and memory on free tier
+            'format': 'bestvideo[ext=mp4][height<=720]+bestaudio[ext=m4a]/best[ext=mp4][height<=720]/best[height<=720]',
             'outtmpl': str(temp_download_path),
             'quiet': False,
             'no_warnings': False,
@@ -126,6 +127,12 @@ def create_clip():
             'noplaylist': True,
             # Merge video+audio into single file
             'merge_output_format': 'mp4',
+            # Download only the segment we need (massive memory savings)
+            'download_ranges': lambda info_dict, *args: [{
+                'start_time': download_start,
+                'end_time': download_end,
+            }],
+            'force_keyframes_at_cuts': True,
         }
 
         # Add cookies if available
@@ -169,16 +176,18 @@ def create_clip():
 
         print(f"Downloaded file: {downloaded_file}")
 
-        # Calculate duration
-        duration = end_time - start_time
+        # Since we downloaded a segment, adjust the FFmpeg offset
+        # The downloaded file starts at download_start, so we need to seek within it
+        ffmpeg_start_offset = start_time - download_start
+        clip_duration = end_time - start_time
 
-        # Use FFmpeg to extract the clip
-        print(f"Extracting clip from {start_time}s to {end_time}s")
+        # Use FFmpeg to extract the precise clip
+        print(f"Extracting clip: seeking {ffmpeg_start_offset}s into downloaded segment, duration {clip_duration}s")
         ffmpeg_command = [
             'ffmpeg',
             '-i', str(downloaded_file),
-            '-ss', str(start_time),
-            '-t', str(duration),
+            '-ss', str(ffmpeg_start_offset),
+            '-t', str(clip_duration),
             '-c:v', 'libx264',
             '-c:a', 'aac',
             '-preset', 'fast',
