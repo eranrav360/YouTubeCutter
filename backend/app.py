@@ -98,8 +98,14 @@ def create_clip():
         cookies_env = os.environ.get('YOUTUBE_COOKIES')
 
         ydl_opts = {
-            # Use lower quality to reduce memory usage on free tier
-            'format': 'worst[ext=mp4]/best[ext=mp4][height<=720]/best[height<=720]/best',
+            # Optimized for quality while staying within 512MB memory limit
+            # Prefer 1080p MP4, fall back to 720p, then lower qualities
+            # Using bestvideo+bestaudio for better quality when possible
+            'format': (
+                'bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]/best[ext=mp4][height<=1080]/'
+                'bestvideo[ext=mp4][height<=720]+bestaudio[ext=m4a]/best[ext=mp4][height<=720]/'
+                'best[height<=720]/best'
+            ),
             'outtmpl': str(temp_download_path),
             'quiet': False,
             'no_warnings': False,
@@ -107,6 +113,8 @@ def create_clip():
             'http_chunk_size': 1048576,  # 1MB chunks
             # CRITICAL: Only download single video, not playlists
             'noplaylist': True,
+            # Merge video+audio into single file
+            'merge_output_format': 'mp4',
         }
 
         # Add cookies if available
