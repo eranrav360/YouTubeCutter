@@ -105,6 +105,8 @@ def create_clip():
             'no_warnings': False,
             # Limit buffer size to reduce memory
             'http_chunk_size': 1048576,  # 1MB chunks
+            # CRITICAL: Only download single video, not playlists
+            'noplaylist': True,
         }
 
         # Add cookies if available
