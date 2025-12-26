@@ -25,4 +25,6 @@ RUN mkdir -p temp_videos
 EXPOSE 5000
 
 # Run with gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--timeout", "300", "--workers", "2", "app:app"]
+# Increased timeout to 600s (10 min) for video processing
+# Single worker to minimize memory usage on free tier (512MB)
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--timeout", "600", "--workers", "1", "--threads", "2", "app:app"]
