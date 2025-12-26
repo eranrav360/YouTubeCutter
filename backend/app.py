@@ -153,55 +153,35 @@ def create_clip():
                 }
             }
 
-        print(f"Downloading video from {url}")
+        # Get direct video URL using yt-dlp (much faster than downloading)
+        print(f"Getting video URL from {url}")
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([url])
-        except Exception as download_error:
-            print(f"Download error: {download_error}")
-            return jsonify({'success': False, 'error': f'Failed to download video: {str(download_error)}'}), 500
+                info = ydl.extract_info(url, download=False)
+                video_url = info['url']
+                print(f"Got direct video URL, processing clip directly")
+        except Exception as extract_error:
+            print(f"URL extraction error: {extract_error}")
+            return jsonify({'success': False, 'error': f'Failed to get video URL: {str(extract_error)}'}), 500
 
-        # Find the downloaded file
-        downloaded_file = None
-        for ext in ['mp4', 'webm', 'mkv']:
-            potential_file = TEMP_DIR / f'{video_id}_full.{ext}'
-            if potential_file.exists():
-                downloaded_file = potential_file
-                break
-
-        if not downloaded_file:
-            print(f"Downloaded file not found. Checked extensions: mp4, webm, mkv")
-            print(f"Files in temp dir: {list(TEMP_DIR.glob('*'))}")
-            return jsonify({'success': False, 'error': 'Failed to download video - file not found after download'}), 500
-
-        print(f"Downloaded file: {downloaded_file}")
-
-        # Since we downloaded a segment, adjust the FFmpeg offset
-        # The downloaded file starts at download_start, so we need to seek within it
-        ffmpeg_start_offset = start_time - download_start
+        # Use FFmpeg to download and extract clip in one step (much faster!)
+        # Seek to start_time in the original video, extract clip_duration
         clip_duration = end_time - start_time
 
-        # Use FFmpeg to extract the precise clip
-        print(f"Extracting clip: seeking {ffmpeg_start_offset}s into downloaded segment, duration {clip_duration}s")
+        print(f"FFmpeg: streaming from {start_time}s, extracting {clip_duration}s clip")
         ffmpeg_command = [
             'ffmpeg',
-            '-i', str(downloaded_file),
-            '-ss', str(ffmpeg_start_offset),
-            '-t', str(clip_duration),
+            '-ss', str(start_time),  # Seek before input (faster)
+            '-i', video_url,  # Stream directly from YouTube
+            '-t', str(clip_duration),  # Duration to extract
             '-c:v', 'libx264',
             '-c:a', 'aac',
-            '-preset', 'fast',
+            '-preset', 'ultrafast',  # Faster encoding
             '-y',  # Overwrite output file
             str(output_path)
         ]
 
         result = subprocess.run(ffmpeg_command, capture_output=True, text=True)
-
-        # Remove the full downloaded file
-        try:
-            downloaded_file.unlink()
-        except Exception as e:
-            print(f"Error removing temp file: {e}")
 
         if result.returncode != 0:
             print(f"FFmpeg error: {result.stderr}")
