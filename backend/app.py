@@ -10,7 +10,18 @@ import threading
 import gc
 
 app = Flask(__name__)
-CORS(app)
+# Configure CORS to allow requests from Vercel frontend
+CORS(app, resources={
+    r"/api/*": {
+        "origins": [
+            "https://you-tube-cutter.vercel.app",
+            "http://localhost:3000",
+            "http://localhost:5173"
+        ],
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type"]
+    }
+})
 
 # Create temp directory for downloads
 TEMP_DIR = Path('temp_videos')
