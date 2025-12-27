@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, Response, stream_with_context
 from flask_cors import CORS
 import yt_dlp
 import os
@@ -8,6 +8,8 @@ from pathlib import Path
 import time
 import threading
 import gc
+import re
+import json
 
 app = Flask(__name__)
 # Configure CORS to allow requests from Vercel frontend
@@ -26,6 +28,9 @@ CORS(app, resources={
 # Create temp directory for downloads
 TEMP_DIR = Path('temp_videos')
 TEMP_DIR.mkdir(exist_ok=True)
+
+# Progress tracking dictionary
+progress_tracker = {}
 
 # Cleanup old files on startup
 def cleanup_old_files():
@@ -177,27 +182,68 @@ def create_clip():
             '-c:v', 'libx264',
             '-c:a', 'aac',
             '-preset', 'ultrafast',  # Faster encoding
+            '-progress', 'pipe:1',  # Output progress to stdout
             '-y',  # Overwrite output file
             str(output_path)
         ]
 
-        result = subprocess.run(ffmpeg_command, capture_output=True, text=True)
+        # Initialize progress tracking for this video
+        progress_tracker[video_id] = {'progress': 0, 'status': 'processing', 'message': 'Starting...'}
 
-        if result.returncode != 0:
-            print(f"FFmpeg error: {result.stderr}")
-            return jsonify({'success': False, 'error': f'Failed to process video with FFmpeg: {result.stderr[:200]}'}), 500
+        # Function to process video in background with progress tracking
+        def process_video():
+            try:
+                progress_tracker[video_id] = {'progress': 10, 'status': 'processing', 'message': 'Extracting video URL...'}
 
-        print(f"Clip created successfully: {output_path}")
+                # Run FFmpeg with progress tracking
+                process = subprocess.Popen(
+                    ffmpeg_command,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    universal_newlines=True,
+                    bufsize=1
+                )
 
-        # Force garbage collection to free memory
-        gc.collect()
+                progress_tracker[video_id] = {'progress': 30, 'status': 'processing', 'message': 'Processing video...'}
 
-        # Return success with download URL
+                # Parse FFmpeg output for progress
+                total_duration = clip_duration
+                for line in process.stderr:
+                    # Extract time from FFmpeg output
+                    time_match = re.search(r'time=(\d+):(\d+):(\d+\.\d+)', line)
+                    if time_match:
+                        hours, minutes, seconds = time_match.groups()
+                        current_time = int(hours) * 3600 + int(minutes) * 60 + float(seconds)
+                        progress_percent = min(int((current_time / total_duration) * 60) + 30, 90)
+                        progress_tracker[video_id] = {
+                            'progress': progress_percent,
+                            'status': 'processing',
+                            'message': f'Encoding... {progress_percent}%'
+                        }
+
+                process.wait()
+
+                if process.returncode == 0:
+                    progress_tracker[video_id] = {'progress': 100, 'status': 'completed', 'message': 'Clip ready!'}
+                else:
+                    stderr_output = process.stderr.read() if hasattr(process.stderr, 'read') else "Unknown error"
+                    progress_tracker[video_id] = {
+                        'progress': 0,
+                        'status': 'error',
+                        'message': f'FFmpeg error: {stderr_output[:200]}'
+                    }
+            except Exception as e:
+                progress_tracker[video_id] = {'progress': 0, 'status': 'error', 'message': str(e)}
+
+        # Start background processing
+        thread = threading.Thread(target=process_video)
+        thread.start()
+
+        # Return immediately with video ID for progress tracking
         return jsonify({
             'success': True,
-            'message': 'Clip created successfully',
-            'videoId': video_id,
-            'downloadUrl': f'/api/download/{video_id}'
+            'message': 'Processing started',
+            'videoId': video_id
         })
 
     except Exception as e:
@@ -205,6 +251,17 @@ def create_clip():
         # Clean up on error
         gc.collect()
         return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/progress/<video_id>', methods=['GET'])
+def get_progress(video_id):
+    """Get processing progress for a video"""
+    try:
+        if video_id in progress_tracker:
+            return jsonify(progress_tracker[video_id])
+        else:
+            return jsonify({'progress': 0, 'status': 'not_found', 'message': 'Video not found'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/download/<video_id>', methods=['GET'])
 def download_clip(video_id):

@@ -13,7 +13,10 @@ export default function App() {
   const [downloadUrl, setDownloadUrl] = useState('');
   const [videoId, setVideoId] = useState('');
   const [showPreview, setShowPreview] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [processingVideoId, setProcessingVideoId] = useState('');
   const playerRef = useRef(null);
+  const progressIntervalRef = useRef(null);
 
   // Extract YouTube video ID from URL
   const extractVideoId = (urlString) => {
@@ -129,6 +132,32 @@ export default function App() {
     return true;
   };
 
+  // Poll for progress updates
+  const pollProgress = (vidId) => {
+    progressIntervalRef.current = setInterval(async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/progress/${vidId}`);
+        const data = await response.json();
+
+        setProgress(data.progress || 0);
+        setMessage(data.message || 'Processing...');
+
+        if (data.status === 'completed') {
+          clearInterval(progressIntervalRef.current);
+          setStatus('success');
+          setMessage('Your clip is ready to download!');
+          setDownloadUrl(`${API_URL}/api/download/${vidId}`);
+        } else if (data.status === 'error') {
+          clearInterval(progressIntervalRef.current);
+          setStatus('error');
+          setMessage(data.message || 'Processing failed');
+        }
+      } catch (error) {
+        console.error('Progress polling error:', error);
+      }
+    }, 500); // Poll every 500ms
+  };
+
   const handleDownload = async () => {
     if (!validateInputs()) {
       setStatus('error');
@@ -136,7 +165,8 @@ export default function App() {
     }
 
     setStatus('processing');
-    setMessage('Processing your video clip...');
+    setProgress(0);
+    setMessage('Starting...');
 
     try {
       const response = await fetch(`${API_URL}/api/clip`, {
@@ -150,11 +180,11 @@ export default function App() {
       });
 
       const data = await response.json();
-      
+
       if (response.ok && data.success) {
-        setStatus('success');
-        setMessage('Your clip is ready to download!');
-        setDownloadUrl(`${API_URL}${data.downloadUrl}`);
+        // Start polling for progress
+        setProcessingVideoId(data.videoId);
+        pollProgress(data.videoId);
       } else {
         setStatus('error');
         setMessage(data.error || 'Failed to process video. Please try again.');
@@ -166,13 +196,27 @@ export default function App() {
     }
   };
 
+  // Cleanup interval on unmount
+  useEffect(() => {
+    return () => {
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+      }
+    };
+  }, []);
+
   const resetForm = () => {
+    if (progressIntervalRef.current) {
+      clearInterval(progressIntervalRef.current);
+    }
     setStatus('idle');
     setMessage('');
     setDownloadUrl('');
     setUrl('');
     setStartTime('');
     setEndTime('');
+    setProgress(0);
+    setProcessingVideoId('');
   };
 
   return (
@@ -309,12 +353,24 @@ export default function App() {
               <div>
                 <h3 className="text-2xl font-bold mb-2">Processing Your Clip</h3>
                 <p className="text-zinc-400">{message}</p>
-                <p className="text-zinc-500 text-sm mt-2">This may take a minute...</p>
-              </div>
-              <div className="flex gap-2 justify-center">
-                <div className="w-2 h-2 bg-red-500 rounded-full animate-bounce"></div>
-                <div className="w-2 h-2 bg-pink-500 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
-                <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{animationDelay: '0.4s'}}></div>
+
+                {/* Progress Bar */}
+                <div className="mt-6 max-w-md mx-auto">
+                  <div className="flex justify-between text-sm text-zinc-400 mb-2">
+                    <span>Progress</span>
+                    <span className="font-bold text-red-400">{progress}%</span>
+                  </div>
+                  <div className="w-full bg-zinc-800 rounded-full h-3 overflow-hidden shadow-inner">
+                    <div
+                      className="h-full bg-gradient-to-r from-red-500 via-pink-500 to-purple-500 transition-all duration-500 ease-out rounded-full shadow-lg"
+                      style={{ width: `${progress}%` }}
+                    >
+                      <div className="w-full h-full bg-gradient-to-r from-white/20 to-transparent"></div>
+                    </div>
+                  </div>
+                </div>
+
+                <p className="text-zinc-500 text-sm mt-4">Please wait while we process your video...</p>
               </div>
             </div>
           ) : (
