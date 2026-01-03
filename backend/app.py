@@ -206,20 +206,21 @@ def create_clip():
 
                 progress_tracker[video_id] = {'progress': 30, 'status': 'processing', 'message': 'Processing video...'}
 
-                # Parse FFmpeg output for progress
+                # Parse FFmpeg progress output (from stdout)
                 total_duration = clip_duration
-                for line in process.stderr:
-                    # Extract time from FFmpeg output
-                    time_match = re.search(r'time=(\d+):(\d+):(\d+\.\d+)', line)
+                for line in process.stdout:
+                    # FFmpeg progress format: "out_time_ms=12345678" (microseconds)
+                    time_match = re.search(r'out_time_ms=(\d+)', line)
                     if time_match:
-                        hours, minutes, seconds = time_match.groups()
-                        current_time = int(hours) * 3600 + int(minutes) * 60 + float(seconds)
-                        progress_percent = min(int((current_time / total_duration) * 60) + 30, 90)
-                        progress_tracker[video_id] = {
-                            'progress': progress_percent,
-                            'status': 'processing',
-                            'message': f'Encoding... {progress_percent}%'
-                        }
+                        microseconds = int(time_match.group(1))
+                        current_time = microseconds / 1000000.0  # Convert to seconds
+                        if total_duration > 0:
+                            progress_percent = min(int((current_time / total_duration) * 60) + 30, 90)
+                            progress_tracker[video_id] = {
+                                'progress': progress_percent,
+                                'status': 'processing',
+                                'message': f'Encoding... {progress_percent}%'
+                            }
 
                 process.wait()
 
