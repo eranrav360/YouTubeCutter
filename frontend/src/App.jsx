@@ -109,6 +109,46 @@ export default function App() {
     }
   };
 
+  // Preview the selected clip segment
+  const previewIntervalRef = useRef(null);
+
+  const handlePreview = () => {
+    if (!playerRef.current) {
+      setMessage('Please load a video first');
+      return;
+    }
+
+    const start = parseTimeToSeconds(startTime);
+    const end = parseTimeToSeconds(endTime);
+
+    if (!end || end <= start) {
+      setMessage('Please set valid start and end times');
+      return;
+    }
+
+    // Clear any existing preview interval
+    if (previewIntervalRef.current) {
+      clearInterval(previewIntervalRef.current);
+    }
+
+    // Seek to start time and play
+    playerRef.current.seekTo(start, true);
+    playerRef.current.playVideo();
+
+    // Stop at end time
+    previewIntervalRef.current = setInterval(() => {
+      if (playerRef.current && playerRef.current.getCurrentTime) {
+        const currentTime = playerRef.current.getCurrentTime();
+        if (currentTime >= end) {
+          playerRef.current.pauseVideo();
+          playerRef.current.seekTo(start, true); // Reset to start for re-preview
+          clearInterval(previewIntervalRef.current);
+          previewIntervalRef.current = null;
+        }
+      }
+    }, 100); // Check every 100ms
+  };
+
   const validateInputs = () => {
     if (!url.trim()) {
       setMessage('Please enter a YouTube URL');
@@ -196,11 +236,14 @@ export default function App() {
     }
   };
 
-  // Cleanup interval on unmount
+  // Cleanup intervals on unmount
   useEffect(() => {
     return () => {
       if (progressIntervalRef.current) {
         clearInterval(progressIntervalRef.current);
+      }
+      if (previewIntervalRef.current) {
+        clearInterval(previewIntervalRef.current);
       }
     };
   }, []);
@@ -208,6 +251,9 @@ export default function App() {
   const resetForm = () => {
     if (progressIntervalRef.current) {
       clearInterval(progressIntervalRef.current);
+    }
+    if (previewIntervalRef.current) {
+      clearInterval(previewIntervalRef.current);
     }
     setStatus('idle');
     setMessage('');
@@ -332,14 +378,27 @@ export default function App() {
                 </div>
               )}
 
-              {/* Download Button */}
-              <button
-                onClick={handleDownload}
-                className="w-full bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-500 hover:to-pink-500 text-white font-bold py-5 px-8 rounded-xl transition-all duration-300 transform hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-red-500/25 flex items-center justify-center gap-3 group"
-              >
-                <Download className="w-5 h-5 group-hover:animate-bounce" />
-                Create Clip
-              </button>
+              {/* Action Buttons */}
+              <div className="grid grid-cols-2 gap-4">
+                {/* Preview Button */}
+                <button
+                  onClick={handlePreview}
+                  disabled={!showPreview || !startTime || !endTime}
+                  className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 disabled:from-zinc-700 disabled:to-zinc-700 disabled:cursor-not-allowed text-white font-bold py-5 px-6 rounded-xl transition-all duration-300 transform hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-blue-500/25 disabled:shadow-none flex items-center justify-center gap-3 group"
+                >
+                  <Play className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                  Preview Clip
+                </button>
+
+                {/* Create Clip Button */}
+                <button
+                  onClick={handleDownload}
+                  className="bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-500 hover:to-pink-500 text-white font-bold py-5 px-6 rounded-xl transition-all duration-300 transform hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-red-500/25 flex items-center justify-center gap-3 group"
+                >
+                  <Download className="w-5 h-5 group-hover:animate-bounce" />
+                  Create Clip
+                </button>
+              </div>
 
               {/* Helper Text */}
               <div className="text-center text-sm text-zinc-500 pt-4">
