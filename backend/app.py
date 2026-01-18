@@ -163,10 +163,21 @@ def create_clip():
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
-                video_url = info['url']
+                if not info:
+                    print("ERROR: extract_info returned None")
+                    return jsonify({'success': False, 'error': 'Failed to extract video info'}), 500
+
+                video_url = info.get('url')
+                if not video_url:
+                    print(f"ERROR: No URL in info dict. Keys: {list(info.keys())[:10]}")
+                    return jsonify({'success': False, 'error': 'No video URL found in response'}), 500
+
                 print(f"Got direct video URL, processing clip directly")
         except Exception as extract_error:
             print(f"URL extraction error: {extract_error}")
+            print(f"Error type: {type(extract_error).__name__}")
+            import traceback
+            traceback.print_exc()
             return jsonify({'success': False, 'error': f'Failed to get video URL: {str(extract_error)}'}), 500
 
         # Use FFmpeg to download and extract clip in one step (much faster!)
