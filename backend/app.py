@@ -70,14 +70,8 @@ def download_and_clip(url, start_time, end_time):
         
         logger.info(f"Processing video - URL: {url}, Start: {start_time}s, End: {end_time}s, Duration: {duration}s")
         
-        # yt-dlp options using Android client (bypasses most restrictions)
+        # yt-dlp options - use web client when cookies are available
         ydl_opts = {
-            # Use Android client which works well without cookies
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['android'],  # Primary method
-                }
-            },
             # Format selection - limit to 720p for faster downloads
             'format': 'best[ext=mp4][height<=720]/best[ext=mp4]/best',
             'outtmpl': str(TEMP_DIR / f"{video_id}_full.%(ext)s"),
@@ -90,14 +84,24 @@ def download_and_clip(url, start_time, end_time):
             'fragment_retries': 5,
             # Headers
             'http_headers': {
-                'User-Agent': 'com.google.android.youtube/17.36.4 (Linux; U; Android 12; GB) gzip',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             },
         }
         
-        # Add cookies if available (for age-restricted/private videos)
+        # Configure client based on cookie availability
         if COOKIE_FILE:
+            # Use web client with cookies (best compatibility)
             ydl_opts['cookiefile'] = str(COOKIE_FILE)
-            logger.info("🔐 Using cookies for authentication")
+            logger.info("🔐 Using web client with cookies for authentication")
+        else:
+            # Use Android client without cookies
+            ydl_opts['extractor_args'] = {
+                'youtube': {
+                    'player_client': ['android'],
+                }
+            }
+            ydl_opts['http_headers']['User-Agent'] = 'com.google.android.youtube/17.36.4 (Linux; U; Android 12; GB) gzip'
+            logger.info("📱 Using Android client (no cookies)")
         
         # Download video
         logger.info(f"Starting download for video ID: {video_id}")
